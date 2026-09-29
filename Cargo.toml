@@ -1,0 +1,23 @@
+# Standalone package (it lives inside the Limen repo tree but is its own module).
+[workspace]
+
+[package]
+name = "sysinfo"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "What THIS machine is: identity, OS, CPU, memory, disks, network, firmware and security posture."
+repository = "https://github.com/CRC-BARRACUDA/limen-sysinfo"
+
+[lib]
+name = "sysinfo"
+path = "lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+limen-sdk-rust = { git = "https://github.com/CRC-BARRACUDA/Limen.git" }
+
+# Linux-only: `statvfs`, for how full a filesystem is. Everything else here is
+# read from /proc and /sys as text.
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"

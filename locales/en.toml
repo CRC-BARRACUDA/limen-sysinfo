@@ -1,0 +1,55 @@
+# English strings for the module's own screen.
+#
+# The default language: anything missing from another catalog falls back here,
+# and anything missing here renders as its own key — visible enough to notice.
+#
+# `[module]` is different: the *host* reads it for the card and the tab. English
+# falls back to limen.toml, which is why it is absent here and present in uk.toml.
+
+[ui]
+title = "This machine"
+subtitle = "What this machine is — manufacturer, model, serial, OS, CPU, memory, disks, network, firmware and what protects it. Read from files; nothing is spawned and nothing leaves the machine."
+scan = "Scan"
+rescan = "Scan again"
+report = "Make report"
+scan_admin = "Scan as administrator"
+search = "Search"
+search_hint = "serial, kernel, disk…"
+shown_of = "{shown} of {total} shown"
+nothing = "Nothing matches."
+
+[section]
+system = "System"
+os = "Operating system"
+cpu = "Processor"
+memory = "Memory"
+disk = "Disks"
+filesystem = "Filesystems"
+network = "Network"
+display = "Display"
+firmware = "Firmware"
+security = "Security"
+
+[col]
+item = "Item"
+value = "Value"
+
+[note]
+dmi_root = "{} could not be read — the DMI serials are root-only on most systems. An absent serial here does not mean the machine has none."
+no_collector = "There is no collector for {} yet, so nothing was read."
+elevate_failed = "{}"
+
+[report]
+nothing = "Nothing has been read yet — press Scan first."
+exported = "Report exported"
+exported_hint = "The document was generated and opened in your default app."
+failed = "Couldn't build the report"
+
+[elevate]
+waiting = "Waiting for authorization…"
+waiting_hint = "The system is asking for administrator rights. The serials are copied into a private folder, read, and deleted."
+refused = "Authorization was refused, so the root-only fields were not read."
+unavailable = "This machine has no way to ask for administrator rights."
+failed = "The elevated read did not finish."
+no_tool = "`install` was not found, so there is nothing to copy the fields with."
+no_workdir = "A private folder for the copy could not be made."

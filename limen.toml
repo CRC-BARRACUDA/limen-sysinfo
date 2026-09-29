@@ -1,0 +1,41 @@
+[module]
+name = "sysinfo"
+display_name = "This machine"
+version = "0.1.0"
+language = "native"
+entry = "sysinfo"
+abi = "native"
+description = "What THIS machine is — manufacturer, model, serial, OS, kernel, CPU, memory, disks, network, firmware and security posture."
+authors = ["Limen"]
+repo = "CRC-BARRACUDA/limen-sysinfo"
+tags = ["inventory", "hardware", "triage"]
+
+[provides]
+capabilities = ["sysinfo.local"]
+
+[optional.capabilities]
+# When a report provider is installed, a "Make Report" action appears.
+"report.build" = ">=0.1"
+
+[permissions]
+# The DMI serials are `0400 root`. Everything else in this module works as an
+# ordinary user, and the module never reaches for this on its own: it reports
+# which fields it could not read, and asks only when the user presses "Scan as
+# administrator". What is elevated is a copy of four files into a private
+# folder — `host.elevate` cannot hand output back, so a copy is the only way to
+# read a root-only file without this process itself being root.
+elevate = true
+
+# Deliberately NOT here:
+#
+#   subprocess — nothing is spawned by the module. Every answer comes out of
+#     /proc, /sys and /etc, read as text. No dmidecode, no lspci, no uname(1),
+#     no shelling out to a tool that may not be installed and may not be the one
+#     you think it is. (The elevated copy above is run by the *host*, which is
+#     what `elevate` consents to.)
+#
+#   network — nothing leaves the machine.
+#
+#   admin / elevated_methods — the module is not admin-gated: it answers fully
+#     without privileges except for four fields, and gating the whole of it
+#     would put a prompt in front of an ordinary inventory.
