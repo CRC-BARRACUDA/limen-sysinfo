@@ -17,10 +17,14 @@
 //! machine being triaged, may not be the binary it claims to be. The module
 //! declares **no permissions**.
 //!
-//! Windows is a stub that says so; see [`windows`].
+//! On Windows the same answers come from the firmware's own table, the
+//! registry and the system's calls — no WMI, no PowerShell, no `systeminfo`,
+//! for the same reason; see [`windows`].
 
 use limen_sdk_rust::ui::{button, label, row, separator, step, table, text, window};
 use limen_sdk_rust::{export_module, rpc, Catalog, Handler, Host, RpcError, Value};
+
+mod facts;
 
 #[cfg(target_os = "linux")]
 mod linux;

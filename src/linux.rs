@@ -11,6 +11,9 @@
 
 use limen_sdk_rust::{json, Value};
 
+pub(crate) use crate::facts::{human_bytes, human_duration, Facts};
+use crate::facts::{is_placeholder, tidy};
+
 mod cpu;
 mod display;
 mod firmware;
@@ -20,74 +23,6 @@ pub(crate) mod os;
 mod security;
 mod storage;
 mod system;
-
-/// One `section | item | value` line, and the notes the collectors raise.
-///
-/// A fact rather than a row of a table: these are not a list of like things but
-/// one machine described from several angles, and what identifies it lives in a
-/// different place from what it is made of.
-#[derive(Default)]
-pub struct Facts {
-    rows: Vec<Value>,
-    /// What could not be read, and why — kept apart from the facts so an
-    /// unreadable field never renders as an empty one.
-    notes: Vec<String>,
-}
-
-impl Facts {
-    /// Record `value` unless it is empty — a fact nobody can read is not a fact,
-    /// and a blank row reads as "this machine has none of that".
-    pub fn say(&mut self, section: &str, item: &str, value: impl AsRef<str>) {
-        let value = tidy(value.as_ref());
-        if value.is_empty() {
-            return;
-        }
-        self.rows.push(json!({
-            "section": section,
-            "item": item,
-            "value": value,
-        }));
-    }
-
-    /// A key that was asked for and could not be answered — the difference
-    /// between "this machine has no serial" and "this process may not read it".
-    ///
-    /// Raised twice for the same reason, the fields are gathered into one note:
-    /// the sentence explaining that DMI serials need root is worth reading once,
-    /// however many fields it cost.
-    pub fn note(&mut self, key: &str, arg: impl AsRef<str>) {
-        let arg = arg.as_ref();
-        if arg.is_empty() {
-            if !self.notes.iter().any(|n| n == key) {
-                self.notes.push(key.to_string());
-            }
-            return;
-        }
-        let prefix = format!("{key}\u{1f}");
-        if let Some(existing) = self.notes.iter_mut().find(|n| n.starts_with(&prefix)) {
-            if !existing.split(&prefix).nth(1).is_some_and(|a| a.split(", ").any(|f| f == arg)) {
-                existing.push_str(", ");
-                existing.push_str(arg);
-            }
-            return;
-        }
-        self.notes.push(format!("{prefix}{arg}"));
-    }
-}
-
-impl Facts {
-    /// The notes raised while collecting, for a test to read.
-    #[cfg(test)]
-    pub fn take_notes(self) -> Vec<String> {
-        self.notes
-    }
-}
-
-/// Collapse the whitespace sysfs pads its strings with, and drop the separator
-/// the flat format reserves.
-fn tidy(s: &str) -> String {
-    s.replace('|', " ").split_whitespace().collect::<Vec<_>>().join(" ")
-}
 
 pub fn collect() -> Value {
     let mut f = Facts::default();
@@ -192,39 +127,5 @@ pub(crate) fn read_trim(path: impl AsRef<std::path::Path>) -> Option<String> {
 /// rather than leaving the row blank.
 pub(crate) fn dmi(name: &str) -> Option<String> {
     read_trim(format!("/sys/class/dmi/id/{name}"))
-        // Vendors ship placeholder strings in DMI more often than they ship
-        // real ones; a board called "To be filled by O.E.M." is not an answer.
-        .filter(|v| {
-            let l = v.to_ascii_lowercase();
-            !(l.contains("to be filled")
-                || l.contains("system manufacturer")
-                || l.contains("default string")
-                || l == "none"
-                || l == "n/a"
-                || l.chars().all(|c| c == '0' || c == '.' || c == ' '))
-        })
-}
-
-/// Bytes as the size a person would say: `931.5 GB`, `16.0 GB`, `512 MB`.
-pub(crate) fn human_bytes(bytes: u64) -> String {
-    const GB: f64 = 1_073_741_824.0;
-    const MB: f64 = 1_048_576.0;
-    let b = bytes as f64;
-    if b >= GB {
-        format!("{:.1} GB", b / GB)
-    } else if b >= MB {
-        format!("{:.0} MB", b / MB)
-    } else {
-        format!("{bytes} B")
-    }
-}
-
-/// Seconds as `12d 4h 37m`, dropping the units that are zero at the front.
-pub(crate) fn human_duration(secs: u64) -> String {
-    let (d, h, m) = (secs / 86_400, (secs % 86_400) / 3600, (secs % 3600) / 60);
-    match (d, h) {
-        (0, 0) => format!("{m}m"),
-        (0, _) => format!("{h}h {m}m"),
-        _ => format!("{d}d {h}h {m}m"),
-    }
+        .filter(|v| !is_placeholder(v))
 }

@@ -8,7 +8,7 @@
 
 [ui]
 title = "This machine"
-subtitle = "What this machine is — manufacturer, model, serial, OS, CPU, memory, disks, network, firmware and what protects it. Read from files; nothing is spawned and nothing leaves the machine."
+subtitle = "What this machine is — manufacturer, model, serial, OS, CPU, memory, disks, network, firmware and what protects it. Read from the system itself; nothing is spawned and nothing leaves the machine."
 scan = "Scan"
 rescan = "Scan again"
 report = "Make report"

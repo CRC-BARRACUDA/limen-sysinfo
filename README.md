@@ -103,13 +103,33 @@ saying whose.
 
 ## Windows
 
-Not collected yet, deliberately. The Windows answers live in WMI, the registry
-and `GetSystemFirmwareTable` — a different shape of code, worth writing on a
-Windows machine where it can be run rather than guessed at. Until then the
-module returns the same envelope with no facts and a note saying why: an empty
-list on its own reads as "this machine has nothing to report", which is the one
-thing it must never say. `src/windows.rs` carries the table of which WMI class
-answers which section.
+The same sections and item names, asked of Windows itself — and, as on Linux,
+without spawning anything: no `wmic`, no `systeminfo`, no PowerShell, no WMI.
+
+| read from | what |
+|---|---|
+| the firmware's table (`GetSystemFirmwareTable`) | manufacturer, model, serial, UUID, chassis, BIOS, board, memory modules |
+| the registry | which Windows and which build, the processor's name and microcode, Secure Boot, UAC |
+| system calls | memory, cores and caches, drives and volumes, adapters, screens, TPM |
+
+Windows hands the firmware table to an ordinary user, serials included, so
+there is nothing to elevate for and **Scan as administrator** never appears.
+
+Where Windows and Linux do not mean the same thing, the item says which it is:
+
+- **Base frequency**, not *Max frequency* — Windows records the nominal clock
+  and nothing about turbo.
+- **Page file**, with its size only. What Windows counts is memory promised,
+  not how much of the page file is in use.
+- **Installed** is the registry's `InstallDate`, and says so: a feature update
+  rewrites it, so on an upgraded machine it is the date of the upgrade.
+- **Virtualization** under *System* comes only from the firmware naming a
+  hypervisor. The processor's "a hypervisor is present" flag is set on any
+  Windows with virtualization-based security on, which is most laptops.
+
+Not reported, because the answer could not be trusted: whether a drive is
+BitLocker-encrypted (Windows tells only an administrator) and whether an
+antivirus is running. A wrong line under *Security* is worse than a missing one.
 
 ## For other modules
 

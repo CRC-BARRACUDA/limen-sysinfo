@@ -15,7 +15,14 @@ use super::*;
 fn every_fact_is_a_section_an_item_and_a_value() {
     let data = collect();
     let facts = data["facts"].as_array().expect("facts is a list");
-    assert!(!facts.is_empty(), "no facts at all: {data}");
+    if cfg!(any(target_os = "linux", target_os = "windows")) {
+        assert!(!facts.is_empty(), "no facts at all: {data}");
+    } else if facts.is_empty() {
+        // Where the collector is not written yet, nothing is the right answer
+        // only as long as it comes with the reason.
+        let notes = data["notes"].as_array().expect("notes is a list");
+        assert!(!notes.is_empty(), "no facts, and no word why: {data}");
+    }
     for f in facts {
         for key in ["section", "item", "value"] {
             let v = f.get(key).and_then(Value::as_str).unwrap_or("");
@@ -33,7 +40,7 @@ fn every_fact_is_a_section_an_item_and_a_value() {
 
 /// The things any machine can answer, whatever it is.
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn the_basics_are_always_there() {
     let data = collect();
     let facts = data["facts"].as_array().unwrap();
@@ -58,28 +65,27 @@ fn the_basics_are_always_there() {
 /// get wrong by a factor of 1024.
 #[test]
 fn sizes_read_as_sizes() {
-    assert_eq!(linux::human_bytes(0), "0 B");
-    assert_eq!(linux::human_bytes(1_048_576), "1 MB");
-    assert_eq!(linux::human_bytes(16 * 1_073_741_824), "16.0 GB");
+    assert_eq!(facts::human_bytes(0), "0 B");
+    assert_eq!(facts::human_bytes(1_048_576), "1 MB");
+    assert_eq!(facts::human_bytes(16 * 1_073_741_824), "16.0 GB");
     // A 1 TB disk as the label on it says, near enough.
-    assert_eq!(linux::human_bytes(1_000_204_886_016), "931.5 GB");
+    assert_eq!(facts::human_bytes(1_000_204_886_016), "931.5 GB");
 }
 
 #[test]
 fn a_duration_drops_the_units_that_are_zero() {
-    assert_eq!(linux::human_duration(90), "1m");
-    assert_eq!(linux::human_duration(3_600 + 120), "1h 2m");
-    assert_eq!(linux::human_duration(86_400 * 12 + 3_600 * 4 + 60 * 37), "12d 4h 37m");
+    assert_eq!(facts::human_duration(90), "1m");
+    assert_eq!(facts::human_duration(3_600 + 120), "1h 2m");
+    assert_eq!(facts::human_duration(86_400 * 12 + 3_600 * 4 + 60 * 37), "12d 4h 37m");
 }
 
 /// The epoch, and a date that is not it — the civil-from-days conversion is the
 /// kind of arithmetic that is right for a year and wrong for a leap day.
 #[test]
-#[cfg(target_os = "linux")]
 fn a_boot_time_is_a_date() {
-    assert_eq!(linux::os::format_unix_utc(0), "1970-01-01 00:00 UTC");
-    assert_eq!(linux::os::format_unix_utc(1_709_164_800), "2024-02-29 00:00 UTC");
-    assert_eq!(linux::os::format_unix_utc(1_735_689_599), "2024-12-31 23:59 UTC");
+    assert_eq!(facts::format_unix_utc(0), "1970-01-01 00:00 UTC");
+    assert_eq!(facts::format_unix_utc(1_709_164_800), "2024-02-29 00:00 UTC");
+    assert_eq!(facts::format_unix_utc(1_735_689_599), "2024-12-31 23:59 UTC");
 }
 
 /// When the machine was installed, and where that answer came from.
@@ -129,7 +135,7 @@ fn the_installation_date_is_plausible_and_says_where_it_came_from() {
 /// than anybody expects, and an inventory that records that as a serial number
 /// is an inventory with a thousand identical machines in it.
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn dmi_placeholders_are_not_facts() {
     let data = collect();
     let facts = data["facts"].as_array().unwrap();
@@ -222,7 +228,7 @@ fn the_search_narrows_the_report() {
 /// against what they know it to be.
 #[test]
 #[ignore = "run with --ignored to read the machine"]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn show_this_machine() {
     let data = collect();
     let mut last = String::new();
@@ -531,4 +537,220 @@ fn the_report_is_named_after_the_machine() {
     }
     // The date is the report module's to add, not this one's.
     assert!(!name.contains("20"), "{name} dated itself");
+}
+
+// ---- Windows: the readers, on tables written here ------------------------- //
+//
+// What the collector reads is whatever this machine happens to be, so the
+// parts that turn bytes into answers are tried on bytes with a known answer.
+
+/// One SMBIOS structure: its type, its fixed part after the four-byte head,
+/// and its strings.
+#[cfg(target_os = "windows")]
+fn smbios_structure(kind: u8, body: &[u8], strings: &[&str]) -> Vec<u8> {
+    let mut out = vec![kind, (4 + body.len()) as u8, 0, 0];
+    out.extend_from_slice(body);
+    for s in strings {
+        out.extend_from_slice(s.as_bytes());
+        out.push(0);
+    }
+    // The zero that ends the set — two of them when there was nothing in it.
+    out.push(0);
+    if strings.is_empty() {
+        out.push(0);
+    }
+    out
+}
+
+/// A structure refers to its strings by number, and the next structure starts
+/// where they end — get the end wrong and everything after is read as nonsense.
+#[test]
+#[cfg(target_os = "windows")]
+fn the_firmware_table_is_cut_where_its_structures_end() {
+    use windows::smbios;
+    let mut table = Vec::new();
+    // A system: manufacturer is string 1, product 2, version none, serial 3.
+    table.extend(smbios_structure(smbios::SYSTEM, &[1, 2, 0, 3], &["Acme", " Rocket 9 ", "SN123"]));
+    // A structure with no strings at all, which still ends with two zeros.
+    table.extend(smbios_structure(200, &[0xAA, 0xBB], &[]));
+    table.extend(smbios_structure(smbios::BOARD, &[1, 2], &["Acme", "To be filled by O.E.M."]));
+    let whole = table.len();
+    table.extend(smbios_structure(127, &[], &[]));
+    // Nothing after the end marker is a structure.
+    table.extend(smbios_structure(smbios::BIOS, &[1], &["never read"]));
+
+    let parsed = smbios::parse(&table);
+    assert_eq!(
+        parsed.iter().map(|s| s.kind).collect::<Vec<_>>(),
+        [smbios::SYSTEM, 200, smbios::BOARD]
+    );
+
+    let system = smbios::first(&parsed, smbios::SYSTEM).unwrap();
+    assert_eq!(system.string(0x04), "Acme");
+    assert_eq!(system.string(0x05), "Rocket 9", "padding is the firmware's, not the name's");
+    assert_eq!(system.string(0x06), "", "a field that names no string has none");
+    assert_eq!(system.string(0x07), "SN123");
+    assert_eq!(system.string(0x40), "", "a field this structure is too short to have");
+
+    let board = smbios::first(&parsed, smbios::BOARD).unwrap();
+    assert_eq!(board.string(0x05), "", "a placeholder is not a model");
+
+    // Cut short in the middle of the board's strings, what was whole before
+    // the cut is still given and the rest is not invented.
+    assert_eq!(smbios::parse(&table[..whole - 5]).len(), 2);
+    assert_eq!(smbios::parse(&table[..3]).len(), 0);
+}
+
+/// The UUID has to match the one on the sticker and in every other tool, and
+/// the first three groups are stored backwards.
+#[test]
+#[cfg(target_os = "windows")]
+fn a_uuid_reads_as_it_is_written_elsewhere() {
+    use windows::smbios;
+    let raw = [
+        0x33, 0x22, 0x11, 0x00, 0x55, 0x44, 0x77, 0x66, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE,
+        0xFF,
+    ];
+    assert_eq!(smbios::uuid(&raw).unwrap(), "00112233-4455-6677-8899-aabbccddeeff");
+    assert_eq!(smbios::uuid(&[0u8; 16]), None, "all zeros is no UUID");
+    assert_eq!(smbios::uuid(&[0xFFu8; 16]), None, "all ones is no UUID");
+    assert_eq!(smbios::uuid(&raw[..8]), None);
+}
+
+/// One field, three meanings — and a 32 GB module is where the first two stop.
+#[test]
+#[cfg(target_os = "windows")]
+fn a_memory_module_is_the_size_it_says() {
+    use windows::{memory::module_bytes, smbios};
+    let module = |size: u16, extended: u32| {
+        let mut body = vec![0u8; 0x20 - 4];
+        body[0x0C - 4..0x0E - 4].copy_from_slice(&size.to_le_bytes());
+        body[0x1C - 4..0x20 - 4].copy_from_slice(&extended.to_le_bytes());
+        smbios::parse(&smbios_structure(smbios::MEMORY_DEVICE, &body, &[])).remove(0)
+    };
+    const GB: u64 = 1_073_741_824;
+    assert_eq!(module_bytes(&module(0, 0)), None, "an empty slot is not a module");
+    assert_eq!(module_bytes(&module(0xFFFF, 0)), None);
+    assert_eq!(module_bytes(&module(16 * 1024, 0)), Some(16 * GB));
+    assert_eq!(module_bytes(&module(0x8000 | 512, 0)), Some(512 * 1024), "kilobytes");
+    assert_eq!(module_bytes(&module(0x7FFF, 64 * 1024)), Some(64 * GB), "the 32-bit field");
+}
+
+/// Cores, threads and sockets are counted from records of different lengths;
+/// the caches are the first processor's.
+#[test]
+#[cfg(target_os = "windows")]
+fn the_processor_layout_is_counted_from_its_records() {
+    use windows::cpu::layout;
+    fn record(kind: u32, body: &[u8]) -> Vec<u8> {
+        let mut out = kind.to_le_bytes().to_vec();
+        out.extend(((8 + body.len()) as u32).to_le_bytes());
+        out.extend_from_slice(body);
+        out
+    }
+    // A core or a package: 22 bytes of flags, the number of groups, one mask.
+    fn processors(mask: u64) -> Vec<u8> {
+        let mut body = vec![0u8; 22];
+        body.extend(1u16.to_le_bytes());
+        body.extend(mask.to_le_bytes());
+        body.extend([0u8; 8]);
+        body
+    }
+    fn cache(level: u8, kind: u32, bytes: u32, mask: u64) -> Vec<u8> {
+        let mut body = vec![level, 0, 0, 0];
+        body.extend(bytes.to_le_bytes());
+        body.extend(kind.to_le_bytes());
+        body.extend([0u8; 18]);
+        body.extend(1u16.to_le_bytes());
+        body.extend(mask.to_le_bytes());
+        body.extend([0u8; 8]);
+        body
+    }
+
+    let mut records = Vec::new();
+    records.extend(record(0, &processors(0b0011))); // a core with two threads
+    records.extend(record(0, &processors(0b0100))); // and two with one each
+    records.extend(record(0, &processors(0b1000)));
+    records.extend(record(3, &processors(0b1111)));
+    records.extend(record(1, &[0u8; 24])); // a kind this does not count
+    records.extend(record(2, &cache(1, 2, 48 * 1024, 0b0011)));
+    records.extend(record(2, &cache(1, 1, 32 * 1024, 0b0011)));
+    records.extend(record(2, &cache(2, 0, 2048 * 1024, 0b0011)));
+    // Another core's smaller cache, which is not the first processor's.
+    records.extend(record(2, &cache(2, 0, 512 * 1024, 0b0100)));
+    records.extend(record(2, &cache(3, 0, 24 * 1024 * 1024, 0b1111)));
+
+    let got = layout(&records);
+    assert_eq!((got.cores, got.logical, got.sockets), (3, 4, 1));
+    assert_eq!(got.caches, ["L1d 48K", "L1i 32K", "L2 2048K", "L3 24576K"]);
+
+    // A record that claims to be longer than what is left ends the reading.
+    assert_eq!(layout(&records[..records.len() - 5]).cores, 3);
+    assert_eq!(layout(&[]), Default::default());
+}
+
+/// A drive names itself by offsets into its own answer, and a memory stick
+/// answers "it spins" like every other USB device.
+#[test]
+#[cfg(target_os = "windows")]
+fn a_drive_is_what_it_says_and_not_what_its_bridge_guesses() {
+    use windows::storage::{describe, kind};
+    let descriptor = |removable: u8, bus: u32, vendor: &str, product: &str, serial: &str| {
+        let mut raw = vec![0u8; 36];
+        raw[10] = removable;
+        raw[28..32].copy_from_slice(&bus.to_le_bytes());
+        for (field, text) in [(12, vendor), (16, product), (24, serial)] {
+            if text.is_empty() {
+                continue; // offset zero: the drive has none
+            }
+            let at = raw.len() as u32;
+            raw[field..field + 4].copy_from_slice(&at.to_le_bytes());
+            raw.extend_from_slice(text.as_bytes());
+            raw.push(0);
+        }
+        raw
+    };
+
+    let nvme = describe(&descriptor(0, 17, "", "Samsung SSD 990 PRO 2TB ", " S7KHNJ0X123456 "));
+    assert_eq!(nvme.name, "Samsung SSD 990 PRO 2TB");
+    assert_eq!(nvme.serial, "S7KHNJ0X123456");
+    assert_eq!(nvme.bus, "NVMe");
+    assert_eq!(kind(&nvme, None), Some("SSD"), "nothing on NVMe spins");
+
+    let stick = describe(&descriptor(1, 7, "Kingston", "DataTraveler 3.0", ""));
+    assert_eq!(stick.name, "Kingston DataTraveler 3.0");
+    assert_eq!(stick.serial, "");
+    assert_eq!(kind(&stick, Some(true)), Some("removable"));
+
+    let sata = describe(&descriptor(0, 11, "", "WDC WD40EFRX", "WD-1"));
+    assert_eq!(kind(&sata, Some(true)), Some("HDD"));
+    assert_eq!(kind(&sata, Some(false)), Some("SSD"));
+    assert_eq!(kind(&sata, None), None, "a drive that will not say is not guessed at");
+
+    // An answer cut short has no strings, and is not read past its end.
+    assert_eq!(describe(&[0u8; 8]).name, "");
+}
+
+/// The registry still says "Windows 10" on Windows 11.
+#[test]
+#[cfg(target_os = "windows")]
+fn windows_11_is_not_called_windows_10() {
+    use windows::os::product_name;
+    assert_eq!(product_name("Windows 10 Pro", "26200"), "Windows 11 Pro");
+    assert_eq!(product_name("Windows 10 Pro", "19045"), "Windows 10 Pro");
+    assert_eq!(product_name("Windows Server 2022 Standard", "20348"), "Windows Server 2022 Standard");
+    assert_eq!(product_name("Windows 10 Pro", ""), "Windows 10 Pro");
+}
+
+/// The pair that identifies a graphics card whatever its driver calls it.
+#[test]
+#[cfg(target_os = "windows")]
+fn a_graphics_card_carries_its_pci_id() {
+    use windows::display::gpu;
+    assert_eq!(
+        gpu("NVIDIA GeForce RTX 3060 Ti", r"PCI\VEN_10DE&DEV_2489&SUBSYS_88261043&REV_A1"),
+        "NVIDIA GeForce RTX 3060 Ti [10de:2489]"
+    );
+    assert_eq!(gpu("Microsoft Basic Render Driver", ""), "Microsoft Basic Render Driver");
+    assert_eq!(gpu("Some Adapter", r"ROOT\BasicDisplay"), "Some Adapter");
 }

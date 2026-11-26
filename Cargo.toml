@@ -20,3 +20,22 @@ limen-sdk-rust = { git = "https://github.com/CRC-BARRACUDA/Limen.git" }
 # read from /proc and /sys as text.
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
+
+# Windows-only: the system's own calls — the firmware table, the registry,
+# memory, drives, adapters and screens. Bindings only; nothing is spawned.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_Graphics_Gdi",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_Networking_WinSock",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+    "Win32_System_Registry",
+    "Win32_System_SystemInformation",
+    "Win32_System_TpmBaseServices",
+] }
