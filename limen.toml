@@ -1,7 +1,7 @@
 [module]
 name = "sysinfo"
 display_name = "This machine"
-version = "0.1.0"
+version = "0.2.0"
 language = "native"
 entry = "sysinfo"
 abi = "native"

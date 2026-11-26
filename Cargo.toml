@@ -3,7 +3,7 @@
 
 [package]
 name = "sysinfo"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "What THIS machine is: identity, OS, CPU, memory, disks, network, firmware and security posture."
