@@ -108,7 +108,7 @@ and `GetSystemFirmwareTable` — a different shape of code, worth writing on a
 Windows machine where it can be run rather than guessed at. Until then the
 module returns the same envelope with no facts and a note saying why: an empty
 list on its own reads as "this machine has nothing to report", which is the one
-thing it must never say. `windows.rs` carries the table of which WMI class
+thing it must never say. `src/windows.rs` carries the table of which WMI class
 answers which section.
 
 ## For other modules

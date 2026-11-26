@@ -50,8 +50,8 @@ fn catalog() -> &'static Catalog {
     static C: std::sync::OnceLock<Catalog> = std::sync::OnceLock::new();
     C.get_or_init(|| {
         Catalog::new(&[
-            ("en", include_str!("locales/en.toml")),
-            ("uk", include_str!("locales/uk.toml")),
+            ("en", include_str!("../locales/en.toml")),
+            ("uk", include_str!("../locales/uk.toml")),
         ])
     })
 }
