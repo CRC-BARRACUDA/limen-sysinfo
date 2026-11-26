@@ -302,12 +302,10 @@ impl SysInfo {
             // A provider that renders answers with a view — its preview of the
             // document, with the buttons that write the file.
             Ok(v) if v.get("widgets").is_some() => v,
-            // One that exports straight to a file writes it, opens it, and
-            // acknowledges with nothing.
-            Ok(_) => window(
-                t("ui.title"),
-                vec![label(t("report.exported")).strong(), label(t("report.exported_hint")).weak()],
-            ),
+            // One that only writes a file acknowledges with nothing. The one
+            // shipped with Limen always answers with a screen; this is for any
+            // other — and says no more than is known: that it was written.
+            Ok(_) => window(t("ui.title"), vec![label(t("report.written")).strong()]),
             Err(e) => window(
                 t("ui.title"),
                 vec![label(t("report.failed")).strong(), label(format!("{e}")).weak()],

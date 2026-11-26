@@ -41,8 +41,7 @@ elevate_failed = "{}"
 
 [report]
 nothing = "Nothing has been read yet — press Scan first."
-exported = "Report exported"
-exported_hint = "The document was generated and opened in your default app."
+written = "Report written"
 failed = "Couldn't build the report"
 
 [elevate]
